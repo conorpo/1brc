@@ -1,0 +1,1 @@
+.\target\debug\arena-1brc.exe | tee { save ./my_output/10.txt }

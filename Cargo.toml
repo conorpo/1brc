@@ -3,4 +3,15 @@ name = "arena-1brc"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "timer_buddy"
+path = "./src/timer-buddy.rs"
+
+[[bin]]
+name = "1brc"
+path = "./src/bin.rs"
+
+[profile.release]
+debug = true
+
 [dependencies]
