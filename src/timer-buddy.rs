@@ -4,14 +4,17 @@
 //! Makes it easy to time parts of your code in a quick and intuitive way.
 //! It saves durations in a queue, which can be iterated over later, and it also returns results immediately so you can choose how to output results.
 
-use std::{collections::VecDeque, time::{Duration, Instant}};
-use std::collections::vec_deque::IntoIter as IntoIter;
+use std::collections::vec_deque::IntoIter;
+use std::{
+    collections::VecDeque,
+    time::{Duration, Instant},
+};
 
 /// Saves a sequence of durations as you call `.lap()`
 /// Results can be read immediately or iterated over later
 pub struct TimerBuddy {
     last_lap: Instant,
-    times: VecDeque<Duration>
+    times: VecDeque<Duration>,
 }
 
 impl TimerBuddy {
@@ -19,11 +22,11 @@ impl TimerBuddy {
     pub fn start() -> Self {
         Self {
             last_lap: Instant::now(),
-            times: VecDeque::new()
+            times: VecDeque::new(),
         }
     }
 
-    /// Gets the duration at the front of the queue. 
+    /// Gets the duration at the front of the queue.
     /// Its up to you to keep track of queue, but I would reccoemnd using multiple minitimers to compose and group functions.
     pub fn pop_front(&mut self) -> Option<Duration> {
         self.times.pop_front()
