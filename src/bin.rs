@@ -5,23 +5,16 @@
 
 // TODO: Try faster hash algorithim
 
-#[macro_use]
-extern crate statrs;
-
 
 use std::{
     fs::File, hash::{BuildHasher, Hasher}, io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, mem, path::{Path, PathBuf}, thread::{self, JoinHandle}, time::Duration
 };
-
 use hashbrown::{HashMap, hash_map::Entry};
-
 use timer_buddy::*;
-
-use statrs::statistics::*;
 
 
 const BLOCK_SIZE_GUESS_BYTES: i64 = 100 * 3000000;
-
+const SUBBLOCK_SIZE_BYTES: usize = 2048 * 2048;
 const DATA_DIRECTORY: &str = "./1brc.data/";
 const CURRENT_FILE: &str = "measurements-1000000000";
 const OUTPUT_DIRECTORY: &str = "./my_output/";
@@ -32,6 +25,7 @@ struct StationStats {
     min: i16,
     max: i16,
 }
+
 
 impl Default for StationStats {
     fn default() -> Self {
@@ -80,16 +74,15 @@ fn input_block(
     let mut buf_reader = BufReader::new(input_file);
     let _ = buf_reader.seek(SeekFrom::Start(block_start_offset));
 
-    const BUFFER_SINGLE_READ_SIZE: usize = 2048 * 2048;
-    let mut buffer = Vec::with_capacity(BUFFER_SINGLE_READ_SIZE + 400); //400 extra bytes incase we end in the middle of entry
+    let mut buffer = Vec::with_capacity(SUBBLOCK_SIZE_BYTES + 300); //400 extra bytes incase we end in the middle of entry
 
     let mut cur_subblock_offset = block_start_offset;
 
-    let mut local_hashmap = HashMap::<Vec<u8>, StationStats>::with_capacity(500);
+    let mut local_hashmap = HashMap::<Vec<u8>, StationStats>::with_capacity(0);
     while cur_subblock_offset < block_end_offset {
         unsafe {
             // SAFETY: All of these willized when file is readl be initia
-            buffer.set_len(BUFFER_SINGLE_READ_SIZE.min((block_end_offset - cur_subblock_offset) as usize));
+            buffer.set_len(SUBBLOCK_SIZE_BYTES.min((block_end_offset - cur_subblock_offset) as usize));
         }
         let _ = buf_reader.read_exact(&mut buffer);
         let _ = buf_reader.read_until(b'\n', &mut buffer);
@@ -124,7 +117,7 @@ fn input_block(
     }
 
     
-    // All expensive comparisons done, lets let the hashmap own the names now
+    // All expensive comparisons done, lets own the actual strings now.
     let mut owned_stats = Vec::<(String, StationStats)>::with_capacity(local_hashmap.len());
     for (name_bytes, stats) in local_hashmap.into_iter() {
         let name = String::from_utf8(name_bytes.to_vec()).unwrap();
@@ -228,6 +221,7 @@ fn output_ref(
             let _ = buf_writer.write(&[b',', b' ']);
         }
     }
+    let _ = buf_writer.write(&[b'}']);
 }
 
 fn main() {
