@@ -16,3 +16,4 @@ debug = true
 
 [dependencies]
 hashbrown = "0.14.5"
+statrs = "0.17.1"
