@@ -13,7 +13,7 @@ use hashbrown::{HashMap, hash_map::Entry};
 use timer_buddy::*;
 
 
-const BLOCK_SIZE_GUESS_BYTES: i64 = 100 * 3000000;
+const BLOCK_SIZE_GUESS_BYTES: i64 = 100 * SUBBLOCK_SIZE_BYTES as i64;
 const SUBBLOCK_SIZE_BYTES: usize = 2048 * 2048;
 const DATA_DIRECTORY: &str = "./1brc.data/";
 const CURRENT_FILE: &str = "measurements-1000000000";
@@ -70,50 +70,51 @@ fn input_block(
     block_start_offset: u64,
     block_end_offset: u64,
 ) -> Vec<(String, StationStats)> {
-    let input_file = File::open(path).expect("Can't open the file we already opened?");
+    let mut input_file = File::open(path).expect("Can't open the file we already opened?");
     let mut buf_reader = BufReader::new(input_file);
     let _ = buf_reader.seek(SeekFrom::Start(block_start_offset));
 
-    let mut buffer = Vec::with_capacity(SUBBLOCK_SIZE_BYTES + 300); //400 extra bytes incase we end in the middle of entry
-
     let mut cur_subblock_offset = block_start_offset;
+    let mut subblock_buffer = Vec::with_capacity(SUBBLOCK_SIZE_BYTES + 300); //400 extra bytes incase we end in the middle of entry
 
     let mut local_hashmap = HashMap::<Vec<u8>, StationStats>::with_capacity(0);
     while cur_subblock_offset < block_end_offset {
         unsafe {
             // SAFETY: All of these willized when file is readl be initia
-            buffer.set_len(SUBBLOCK_SIZE_BYTES.min((block_end_offset - cur_subblock_offset) as usize));
+            subblock_buffer.set_len(SUBBLOCK_SIZE_BYTES.min((block_end_offset - cur_subblock_offset) as usize));
         }
-        let _ = buf_reader.read_exact(&mut buffer);
-        let _ = buf_reader.read_until(b'\n', &mut buffer);
-        buffer.pop();
+        let _ = buf_reader.read_exact(&mut subblock_buffer);
+        let _ = buf_reader.read_until(b'\n', &mut subblock_buffer);
+        cur_subblock_offset += subblock_buffer.len() as u64;
+        subblock_buffer.pop();
 
-        cur_subblock_offset = buf_reader.stream_position().unwrap();
 
-        for line in buffer.split(|char| char == &b'\n') {
+        for line in subblock_buffer.split(|char| char == &b'\n') {
             let (reading_val, split_index) = parse_reading(line);
 
-            let station_name = &line[..split_index];
-
+            let station_name = &line[..split_index];            
+            
             let stats = match local_hashmap.get_mut(station_name) {
                 Some(stats) => stats,
                 None => {
-                    let _ = local_hashmap.insert(station_name.to_owned(), StationStats::default());
-                    
-                    local_hashmap.get_mut(station_name).unwrap()
+                    local_hashmap.insert_unique_unchecked(station_name.to_owned(), StationStats::default()).1
                 }
             };
             
             
             // SAFETY: Entry Count & Temperature Sum will never be over u32::MAX
-            stats.entry_count += 1;
-            stats.temperature_sum += reading_val as i32;
-            
-            stats.min = stats.min.min(reading_val);
-            stats.max = stats.max.max(reading_val);
-        }
+            unsafe {
+                stats.entry_count = stats.entry_count.unchecked_add(1);
+                stats.temperature_sum = stats.temperature_sum.unchecked_add(reading_val as i32);
 
-        
+                if reading_val < stats.min {
+                    stats.min = reading_val;
+                }
+                if reading_val > stats.max {
+                    stats.max = reading_val;
+                }
+            }
+        }
     }
 
     
@@ -134,6 +135,7 @@ fn input_multithreaded(mut station_map: StationMap, path: PathBuf) -> StationMap
             panic!("Failed to load file");
         }
     };
+    
     let file_length = file.metadata().unwrap().len();
     let mut main_reader = BufReader::new(file);
     let mut buffer = Vec::with_capacity(120);
